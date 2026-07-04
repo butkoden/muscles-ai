@@ -2,7 +2,36 @@ from __future__ import annotations
 
 from typing import Any
 
-from muscles import ActionContext, register_action
+try:
+    from muscles import ActionContext
+except Exception:  # pragma: no cover
+    from muscles.core.core import ActionContext
+
+try:
+    from muscles import register_action  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    register_action = None
+
+
+def _register_action(app, **kwargs):
+    if register_action is not None:
+        return register_action(app, **kwargs)
+    from muscles.core.core import ActionContract, get_application_registry
+    return get_application_registry(app).add_action(
+        ActionContract(
+            name=kwargs["name"],
+            description=kwargs.get("description", ""),
+            input_schema=kwargs.get("input_schema", None),
+            output_schema=kwargs.get("output_schema", None),
+            rules=kwargs.get("rules", []),
+            handler_ref=kwargs.get("handler_ref", None),
+            transports=kwargs.get("transports", []),
+            stream_output=kwargs.get("stream_output", False),
+            stream_metadata=kwargs.get("stream_metadata", None) or {},
+            metadata=kwargs.get("metadata", None) or {},
+            handler=kwargs.get("handler"),
+        )
+    )
 
 from .runtime import AskResult, SearchResult
 
@@ -45,7 +74,7 @@ SearchActionResult = dict[str, Any]
 
 
 def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
-    register_action(
+    _register_action(
         app,
         name="ai.ask",
         description="Ask a question to AI runtime.",
@@ -53,7 +82,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         transports=transports,
         handler=_ask,
     )
-    register_action(
+    _register_action(
         app,
         name="ai.search",
         description="Search in AI retrieval layer.",
@@ -61,7 +90,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         transports=transports,
         handler=_search,
     )
-    register_action(
+    _register_action(
         app,
         name="ai.sources.list",
         description="List registered AI sources.",
@@ -69,7 +98,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         transports=transports,
         handler=_sources_list,
     )
-    register_action(
+    _register_action(
         app,
         name="ai.documents.inspect",
         description="Inspect a source for doc/ chunk availability.",
@@ -77,7 +106,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         transports=transports,
         handler=_documents_inspect,
     )
-    register_action(
+    _register_action(
         app,
         name="ai.index.request",
         description="Request index sync/refresh action.",
@@ -85,7 +114,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         transports=transports,
         handler=_index_request,
     )
-    register_action(
+    _register_action(
         app,
         name="ai.inspect",
         description="Inspect AI package runtime metadata (safe to show).",
@@ -93,7 +122,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         transports=["cli", "http", "mcp"],
         handler=_inspect,
     )
-    register_action(
+    _register_action(
         app,
         name="ai.doctor",
         description="Run lightweight runtime health check.",

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any, Mapping
-
-from muscles import DependencyContainer
 
 from .actions import register_ai_actions
 from .config import AiConfig
@@ -91,7 +90,7 @@ def _normalize_config(config) -> AiConfig:
 def _ensure_container(app):
     container = getattr(app, "container", None)
     if container is None:
-        container = DependencyContainer()
+        container = _dependency_container()
         setattr(app, "container", container)
     return container
 
@@ -102,9 +101,45 @@ def _resolve_install_hook():
     """
     try:
         from muscles.core.lifecycle import install_package  # type: ignore[import-not-found]
+        return install_package
     except Exception:
+        pass
+    try:
+        from muscles.lifecycle import install_package  # type: ignore[import-not-found]
+        return install_package
+    except Exception:
+        return None
+
+
+def _dependency_container():
+    try:
+        from muscles.core import DependencyContainer  # type: ignore[import-not-found]
+        return DependencyContainer()
+    except Exception:  # pragma: no cover
         try:
-            from muscles.lifecycle import install_package  # type: ignore[import-not-found]
+            from muscles.core import DependencyContainer  # type: ignore[import-not-found]
+            return DependencyContainer()
         except Exception:
-            return None
-    return install_package
+            return _LegacyContainer()
+
+
+class _LegacyContainer:
+    """
+    Fallback container for older Muscles versions that do not expose DependencyContainer.
+    """
+
+    def __init__(self):
+        self._entries: dict[type, tuple[Any, tuple[Any, ...], dict[str, Any]]] = {}
+
+    def register(self, interface: type, provider: Any, *args: Any, **kwargs: Any):
+        self._entries[interface] = (provider, args, kwargs)
+
+    def resolve(self, interface: type):
+        if interface not in self._entries:
+            raise KeyError(f"Dependency {interface.__name__} not registered")
+        provider, args, kwargs = self._entries[interface]
+        if inspect.isclass(provider):
+            return provider(*args, **kwargs)
+        if callable(provider):
+            return provider(*args, **kwargs)
+        return provider
