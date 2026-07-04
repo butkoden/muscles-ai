@@ -31,7 +31,7 @@ Importing package symbols uses lazy `__getattr__` to keep package startup lightw
 
 - `AiPackage` — package installer for `init_package` integration.
 - `AiRuntime` — runtime container for RAG execution.
-- `AiConfig`, `AskRequest`, `SearchResult`, `AiAnswer`.
+- `AiConfig`, `AskResult`, `SearchResult`, `SourceChunk`.
 - `init_package(app, config)` entry point for Muscles.
 
 ## Default actions
