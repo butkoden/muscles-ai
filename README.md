@@ -50,3 +50,25 @@ The package registers the following actions:
 
 - `muscles-ai` intentionally does not open HTTP routes.
 - Runtime clients must be registered in DI and used from actions/context, not kept in `ApplicationRegistry`.
+
+## Examples
+
+### Direct package initialization
+
+Run an end-to-end smoke scenario with `muscles_ai` actions:
+
+```bash
+PYTHONPATH=src python examples/run_ai_smoke.py
+```
+
+### Action calls through a dispatcher
+
+```bash
+PYTHONPATH=src python examples/run_ai_configured.py
+```
+
+Both examples:
+
+- initialize the package via `init_package(app, config)`;
+- register all ai actions;
+- call actions through `ActionDispatcher`.
