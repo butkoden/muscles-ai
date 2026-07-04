@@ -8,11 +8,28 @@ Framework-level AI package for the Muscles ecosystem.
 - Provide read-only primitives for question answering and retrieval.
 - Stay transport-agnostic: transport adapters (HTTP/CLI/MCP/JSON-RPC/SSE) call `Muscles actions`.
 
+## Ecosystem Position
+
+`muscles-ai` is a framework extension, not an application template and not a
+transport adapter. It registers AI-oriented actions in a Muscles app and lets
+other packages project those actions through HTTP, CLI, MCP, JSON-RPC or SSE.
+
+Related repositories:
+
+- [`muscles`](https://github.com/butkoden/muscles) - core action contracts, dispatcher, inspect contract and canonical documentation.
+- [`muscles-documents`](https://github.com/butkoden/muscles-documents) - document loading/parsing/chunking actions that AI flows can inspect or compose with.
+- [`muscles-mcp`](https://github.com/butkoden/muscles-mcp) - MCP projection for AI tools.
+- [`muscles-sse`](https://github.com/butkoden/muscles-sse) - streaming projection for long AI output.
+- [`muscles-benchmarks`](https://github.com/butkoden/muscles-benchmarks) - regression coverage for AI extension contracts.
+
 ## Installation
 
 ```bash
-pip install muscles-ai
+pip install git+https://github.com/butkoden/muscles-ai.git
 ```
+
+The canonical ecosystem install matrix lives in
+[`muscles/docs/installation.md`](https://github.com/butkoden/muscles/blob/master/docs/installation.md).
 
 The package expects to be loaded as a Muscles module:
 
@@ -50,6 +67,8 @@ The package registers the following actions:
 
 - `muscles-ai` intentionally does not open HTTP routes.
 - Runtime clients must be registered in DI and used from actions/context, not kept in `ApplicationRegistry`.
+- Transport packages should discover `ai.*` actions through `inspect_application(app)` and execute through `ActionDispatcher`.
+- Document ingestion belongs in `muscles-documents`; AI should consume document contracts instead of duplicating parsers.
 
 ## Examples
 
