@@ -45,7 +45,7 @@ def test_ai_actions_emit_safe_framework_spans_without_otel_dependency():
 
     assert ask.value["sources"]
     assert search.value["hits"]
-    assert index_request.value["status"] == "ok"
+    assert index_request.value["status"] in {"accepted", "planned", "not_supported"}
     assert {record["name"] for record in telemetry.records} >= {
         "muscles.ai.embed",
         "muscles.ai.retrieve",

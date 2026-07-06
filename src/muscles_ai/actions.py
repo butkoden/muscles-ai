@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import asdict, is_dataclass
 from typing import Any, Iterator
 
 try:
@@ -34,7 +35,7 @@ def _register_action(app, **kwargs):
         )
     )
 
-from .runtime import AskResult, SearchResult
+from .contracts import AskResult, ContextResult, SearchResult
 
 
 ASK_SCHEMA = {
@@ -43,6 +44,9 @@ ASK_SCHEMA = {
         "question": {"type": "string"},
         "top_k": {"type": "integer", "minimum": 1, "maximum": 100},
         "source": {"type": "string"},
+        "mode": {"type": "string", "enum": ["keyword", "vector", "hybrid"]},
+        "filters": {"type": "object"},
+        "metadata": {"type": "object"},
     },
     "required": ["question"],
     "additionalProperties": False,
@@ -55,6 +59,24 @@ SEARCH_SCHEMA = {
         "query": {"type": "string"},
         "top_k": {"type": "integer", "minimum": 1, "maximum": 100},
         "source": {"type": "string"},
+        "mode": {"type": "string", "enum": ["keyword", "vector", "hybrid"]},
+        "filters": {"type": "object"},
+        "metadata": {"type": "object"},
+    },
+    "required": ["query"],
+    "additionalProperties": False,
+}
+
+
+RETRIEVE_CONTEXT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string"},
+        "top_k": {"type": "integer", "minimum": 1, "maximum": 100},
+        "source": {"type": "string"},
+        "mode": {"type": "string", "enum": ["keyword", "vector", "hybrid"]},
+        "filters": {"type": "object"},
+        "metadata": {"type": "object"},
     },
     "required": ["query"],
     "additionalProperties": False,
@@ -65,6 +87,17 @@ SIMPLE_SCHEMA = {
     "type": "object",
     "properties": {
         "source": {"type": "string"},
+    },
+    "additionalProperties": False,
+}
+
+
+INDEX_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "source": {"type": "string"},
+        "dry_run": {"type": "boolean"},
+        "metadata": {"type": "object"},
     },
     "additionalProperties": False,
 }
@@ -93,11 +126,27 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
     )
     _register_action(
         app,
+        name="ai.retrieve_context",
+        description="Retrieve block-level AI context with citations.",
+        input_schema=RETRIEVE_CONTEXT_SCHEMA,
+        transports=transports,
+        handler=_retrieve_context,
+    )
+    _register_action(
+        app,
         name="ai.sources.list",
         description="List registered AI sources.",
         input_schema=SIMPLE_SCHEMA,
         transports=transports,
         handler=_sources_list,
+    )
+    _register_action(
+        app,
+        name="ai.source.inspect",
+        description="Inspect a registered AI source.",
+        input_schema=SIMPLE_SCHEMA,
+        transports=transports,
+        handler=_source_inspect,
     )
     _register_action(
         app,
@@ -111,7 +160,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         app,
         name="ai.index.request",
         description="Request index sync/refresh action.",
-        input_schema=SIMPLE_SCHEMA,
+        input_schema=INDEX_SCHEMA,
         transports=transports,
         handler=_index_request,
     )
@@ -134,7 +183,9 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
     return [
         ("ai.ask", "done"),
         ("ai.search", "done"),
+        ("ai.retrieve_context", "done"),
         ("ai.sources.list", "done"),
+        ("ai.source.inspect", "done"),
         ("ai.documents.inspect", "done"),
         ("ai.index.request", "done"),
         ("ai.inspect", "done"),
@@ -160,17 +211,10 @@ def _runtime_type():
 
 
 def _to_contract(result: Any) -> dict[str, Any]:
-    if isinstance(result, AskResult):
-        return {
-            "question": result.question,
-            "answer": result.answer,
-            "sources": [chunk.__dict__ for chunk in result.sources],
-        }
-    if isinstance(result, SearchResult):
-        return {
-            "query": result.query,
-            "hits": [hit.__dict__ for hit in result.hits],
-        }
+    if isinstance(result, (AskResult, SearchResult, ContextResult)):
+        return asdict(result)
+    if is_dataclass(result):
+        return asdict(result)
     return result if isinstance(result, dict) else {"value": result}
 
 
@@ -196,6 +240,9 @@ def _ask(payload: dict[str, Any], context: ActionContext) -> AskActionResult:
             payload["question"],
             top_k=top_k,
             source=source,
+            mode=payload.get("mode", "hybrid"),
+            filters=payload.get("filters", {}),
+            metadata=payload.get("metadata", {}),
         )
     with telemetry.span("muscles.ai.answer", **attrs, **{"ai.citations.count": len(result.sources)}):
         return _to_contract(result)
@@ -216,15 +263,45 @@ def _search(payload: dict[str, Any], context: ActionContext) -> SearchActionResu
             payload["query"],
             top_k=top_k,
             source=payload.get("source", "default"),
+            mode=payload.get("mode", "hybrid"),
+            filters=payload.get("filters", {}),
+            metadata=payload.get("metadata", {}),
         )
     with telemetry.span("muscles.ai.rerank", **attrs, **{"ai.documents.retrieved": len(result.hits)}):
+        return _to_contract(result)
+
+
+def _retrieve_context(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
+    runtime = _resolve_runtime(context)
+    telemetry = _telemetry(context)
+    attrs = _ai_attributes(runtime)
+    top_k = payload.get("top_k", runtime.top_k_default)
+    with telemetry.span(
+        "muscles.ai.retrieve",
+        **attrs,
+        **{"ai.retriever": "runtime", "ai.documents.retrieved": int(top_k)},
+    ):
+        result = runtime.retrieve_context(
+            payload["query"],
+            top_k=top_k,
+            source=payload.get("source", "default"),
+            mode=payload.get("mode", "hybrid"),
+            filters=payload.get("filters", {}),
+            metadata=payload.get("metadata", {}),
+        )
+    with telemetry.span("muscles.ai.rerank", **attrs, **{"ai.context.blocks.count": len(result.context)}):
         return _to_contract(result)
 
 
 def _sources_list(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
     del payload
     runtime = _resolve_runtime(context)
-    return {"sources": runtime.list_sources()}
+    return {"sources": runtime.list_sources(), "items": runtime.list_source_details()}
+
+
+def _source_inspect(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
+    runtime = _resolve_runtime(context)
+    return runtime.inspect_source(source=payload.get("source"))
 
 
 def _documents_inspect(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
@@ -234,7 +311,6 @@ def _documents_inspect(payload: dict[str, Any], context: ActionContext) -> dict[
 
 
 def _index_request(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
-    del payload
     runtime = _resolve_runtime(context)
     telemetry = _telemetry(context)
     with telemetry.span(
@@ -242,7 +318,11 @@ def _index_request(payload: dict[str, Any], context: ActionContext) -> dict[str,
         **_ai_attributes(runtime),
         **{"ai.embedding.model": runtime.model_name or "default"},
     ):
-        return runtime.request_index()
+        return runtime.request_index(
+            source=payload.get("source"),
+            dry_run=bool(payload.get("dry_run", False)),
+            metadata=payload.get("metadata", {}),
+        )
 
 
 def _inspect(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
@@ -251,16 +331,9 @@ def _inspect(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
 
 
 def _doctor(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
+    del payload
     runtime = _resolve_runtime(context)
-    return {
-        "status": "ok",
-        "checks": [
-            {
-                "name": "ai.runtime.exists",
-                "status": "ok" if runtime is not None else "failed",
-            }
-        ],
-    }
+    return runtime.doctor()
 
 
 def _telemetry(context: ActionContext):

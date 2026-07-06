@@ -1,43 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any
+from typing import Any, Mapping
 
-
-@dataclass(frozen=True)
-class SourceChunk:
-    source: str
-    excerpt: str
-    score: float | None = None
-
-
-@dataclass(frozen=True)
-class SearchHit:
-    chunk_id: str
-    source: str
-    score: float
-    excerpt: str
-
-
-@dataclass(frozen=True)
-class AskResult:
-    question: str
-    answer: str
-    sources: list[SourceChunk] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class SearchResult:
-    query: str
-    hits: list[SearchHit] = field(default_factory=list)
+from .contracts import (
+    AskResult,
+    ContextResult,
+    RetrievalPolicy,
+    SearchQuery,
+    SearchResult,
+)
+from .memory import FakeLLMProvider, NoopLLMProvider
+from .pipeline import RagPipeline, SourceRegistry, default_source, source_capabilities
 
 
 class AiRuntime:
     """
-    Placeholder runtime class for stage-1 AI package.
-    It intentionally keeps behavior explicit and deterministic until provider adapters
-    and prompt pipelines are introduced in follow-up steps.
+    Framework-level RAG runtime.
+
+    The runtime owns orchestration and contracts, while project code owns data
+    adapters. It never opens database/vector/search connections by itself.
     """
 
     def __init__(
@@ -54,58 +35,102 @@ class AiRuntime:
         self.provider = provider
         self.model_name = model_name
         self.options = dict(options or {})
+        self.options.setdefault("timeout_ms", 30_000)
         self.top_k_default = top_k_default
         self.top_k_max = top_k_max
+        self.default_policy = RetrievalPolicy(limit_max=top_k_max)
+        self.source_registry = SourceRegistry()
+        self.llm_provider = self._build_llm_provider()
+        self.pipeline = RagPipeline(self.source_registry, policy=self.default_policy, llm_provider=self.llm_provider)
+        self.register_source("default", default_source("default"))
+        self.register_source("documents", default_source("documents"))
 
-    def ask(self, question: str, *, top_k: int = 5, source: str = "default") -> AskResult:
-        limit = max(1, min(int(top_k), self.top_k_max))
-        return AskResult(
-            question=question,
-            answer=(
-                f"AI runtime '{self.key}' received question: {question}"
-                f" (provider={self.provider}, model={self.model_name or 'default'})"
-            ),
-            sources=[
-                SourceChunk(
-                    source=source,
-                    excerpt=f"No indexed chunks available for '{source}' in MVP runtime.",
-                    score=0.0,
-                )
-            ] * limit,
-        )
+    def register_source(self, name: str, source: Any, *, policy: RetrievalPolicy | None = None) -> None:
+        self.source_registry.register(name, source, policy=policy)
 
-    def search(self, query: str, *, top_k: int = 5, source: str = "default") -> SearchResult:
-        limit = max(1, min(int(top_k), self.top_k_max))
-        return SearchResult(
-            query=query,
-            hits=[
-                SearchHit(
-                    chunk_id=f"{source}:{idx}",
-                    source=source,
-                    score=0.0,
-                    excerpt="MVP search stub result. Real vector retrieval is planned.",
-                )
-                for idx in range(limit)
-            ],
+    def ask(
+        self,
+        question: str,
+        *,
+        top_k: int = 5,
+        source: str = "default",
+        mode: str = "hybrid",
+        filters: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        policy: RetrievalPolicy | None = None,
+    ) -> AskResult:
+        query = self._query(question, source=source, mode=mode, top_k=top_k, filters=filters, metadata=metadata)
+        self.pipeline.llm_provider = self.llm_provider
+        return self.pipeline.ask(query, options=self.options, policy=policy)
+
+    def search(
+        self,
+        query: str | SearchQuery,
+        *,
+        top_k: int = 5,
+        source: str = "default",
+        mode: str = "hybrid",
+        filters: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        policy: RetrievalPolicy | None = None,
+    ) -> SearchResult:
+        search_query = query if isinstance(query, SearchQuery) else self._query(
+            query,
+            source=source,
+            mode=mode,
+            top_k=top_k,
+            filters=filters,
+            metadata=metadata,
         )
+        return self.pipeline.search(search_query, policy=policy)
+
+    def retrieve_context(
+        self,
+        query: str | SearchQuery,
+        *,
+        top_k: int = 5,
+        source: str = "default",
+        mode: str = "hybrid",
+        filters: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        policy: RetrievalPolicy | None = None,
+    ) -> ContextResult:
+        search_query = query if isinstance(query, SearchQuery) else self._query(
+            query,
+            source=source,
+            mode=mode,
+            top_k=top_k,
+            filters=filters,
+            metadata=metadata,
+        )
+        return self.pipeline.retrieve_context(search_query, policy=policy)
 
     def list_sources(self) -> list[str]:
-        return ["default", "documents"]
+        return self.source_registry.names()
+
+    def list_source_details(self) -> list[dict[str, Any]]:
+        return self.source_registry.list_safe()
+
+    def inspect_source(self, source: str | None = None) -> dict[str, Any]:
+        return self.source_registry.inspect(source or "default")
 
     def inspect_documents(self, source: str | None = None) -> dict[str, Any]:
-        return {
-            "source": source or "default",
-            "status": "not_connected",
-            "note": "documents package integration is optional for MVP",
-        }
+        payload = self.inspect_source(source or "documents")
+        payload.setdefault("note", "ai.documents.inspect is a compatibility alias for ai.source.inspect")
+        return payload
 
-    def request_index(self) -> dict[str, Any]:
-        return {
-            "status": "ok",
-            "provider": self.provider,
-            "provider_model": self.model_name or "default",
-            "message": "Index request was accepted in MVP mode",
-        }
+    def request_index(
+        self,
+        *,
+        source: str | None = None,
+        dry_run: bool = False,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        source_name = source or "default"
+        adapter = self.source_registry.resolve(source_name)
+        if adapter is None or not hasattr(adapter, "request_index"):
+            return {"status": "not_supported", "source": source_name}
+        return adapter.request_index(source=source_name, dry_run=dry_run, metadata=metadata or {})
 
     def capabilities(self) -> dict[str, Any]:
         return {
@@ -115,7 +140,67 @@ class AiRuntime:
             "features": [
                 "ask",
                 "search",
+                "retrieve_context",
+                "source.inspect",
                 "documents.inspect",
                 "index.request",
             ],
+            "sources": {
+                "count": len(self.list_sources()),
+                "items": self.list_source_details(),
+            },
+            "default_policy": self.default_policy.__dict__,
         }
+
+    def doctor(self) -> dict[str, Any]:
+        checks = [
+            {"name": "ai.runtime.exists", "status": "ok"},
+            {
+                "name": "ai.llm_provider.exists",
+                "status": "ok" if self.llm_provider is not None else "failed",
+                "provider": self.provider,
+            },
+        ]
+        for source_name in self.list_sources():
+            adapter = self.source_registry.resolve(source_name)
+            capabilities = source_capabilities(adapter)
+            status = "ok" if adapter is not None and capabilities else "warning"
+            if adapter is not None and hasattr(adapter, "healthcheck"):
+                try:
+                    health = adapter.healthcheck()
+                    status = str(health.get("status", status))
+                except Exception:
+                    status = "error"
+            checks.append(
+                {
+                    "name": f"ai.source.{source_name}",
+                    "status": status,
+                    "capabilities": capabilities,
+                }
+            )
+        overall = "ok" if all(check["status"] in {"ok", "ready"} for check in checks) else "warning"
+        return {"status": overall, "checks": checks}
+
+    def _query(
+        self,
+        text: str,
+        *,
+        source: str,
+        mode: str,
+        top_k: int,
+        filters: Mapping[str, Any] | None,
+        metadata: Mapping[str, Any] | None,
+    ) -> SearchQuery:
+        return SearchQuery(
+            text=text,
+            source=source,
+            mode=mode,  # type: ignore[arg-type]
+            limit=max(1, min(int(top_k or self.top_k_default), self.top_k_max)),
+            filters=filters or {},
+            metadata=metadata or {},
+        )
+
+    def _build_llm_provider(self):
+        if self.provider == "fake":
+            return FakeLLMProvider(answer_prefix="Fake answer")
+        return NoopLLMProvider(runtime_key=self.key, provider=self.provider, model_name=self.model_name)
