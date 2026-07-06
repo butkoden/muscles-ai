@@ -31,19 +31,7 @@ class AiPackage:
 
     def doctor_provider(self, app, runtime: AiRuntime, config: AiConfig | Mapping[str, Any] | None = None):
         del app, config
-
-        def doctor_ai() -> dict[str, Any]:
-            return {
-                "status": "ok",
-                "checks": [
-                    {
-                        "name": "ai.runtime.exists",
-                        "status": "ok" if runtime is not None else "failed",
-                    }
-                ],
-            }
-
-        return doctor_ai
+        return runtime.doctor
 
     def init(self, app, config):
         package_config = _normalize_config(config or {})

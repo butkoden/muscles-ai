@@ -48,7 +48,11 @@ Importing package symbols uses lazy `__getattr__` to keep package startup lightw
 
 - `AiPackage` — package installer for `init_package` integration.
 - `AiRuntime` — runtime container for RAG execution.
-- `AiConfig`, `AskResult`, `SearchResult`, `SourceChunk`.
+- `SearchQuery`, `RetrievedChunk`, `ContextBlock`, `Citation`, `RetrievalPolicy`.
+- `SearchResult`, `ContextResult`, `AskResult`, `SearchHit`, `SourceChunk`.
+- `VectorSearchPort`, `KeywordSearchPort`, `ParentFetchPort`, `IndexRequestPort`, `LLMProvider`.
+- `InMemoryRagSource`, `FakeLLMProvider`, `NoopLLMProvider` for tests and examples.
+- `AiConfig`.
 - `init_package(app, config)` entry point for Muscles.
 
 ## Default actions
@@ -57,11 +61,47 @@ The package registers the following actions:
 
 - `ai.ask`
 - `ai.search`
+- `ai.retrieve_context`
 - `ai.sources.list`
+- `ai.source.inspect`
 - `ai.documents.inspect`
 - `ai.index.request`
 - `ai.inspect`
 - `ai.doctor`
+
+## RAG Toolkit
+
+`muscles-ai` owns RAG orchestration, not project data storage:
+
+```text
+query -> retrieval -> merge -> deterministic rerank -> context -> prompt -> LLM -> answer + citations
+```
+
+Projects register sources/adapters on `AiRuntime`:
+
+```python
+from muscles_ai import InMemoryRagSource, RetrievedChunk
+
+runtime.register_source(
+    "kb",
+    InMemoryRagSource(
+        "kb",
+        chunks=[
+            RetrievedChunk(
+                chunk_id="flowwow-1",
+                text="Flowwow backend used PostgreSQL and Kafka.",
+                source="kb",
+                parent_id="flowwow",
+                title="Flowwow",
+            )
+        ],
+    ),
+)
+```
+
+Real projects can implement the same ports over Qdrant, PostgreSQL, Elasticsearch
+or another store. This package does not own DSNs, collections, mappings,
+migrations or document parsing.
 
 ## Notes
 

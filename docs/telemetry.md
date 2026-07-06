@@ -30,6 +30,7 @@ that implements `span(name, **attributes)`, including `muscles-otel`.
 - `ai.retriever`
 - `ai.documents.retrieved`
 - `ai.citations.count`
+- `ai.context.blocks.count`
 
 Do not add raw user queries, prompts, generated answers, excerpts, document
 chunks, provider request/response bodies or API keys to span attributes.
