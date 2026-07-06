@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 try:
     from muscles import ActionContext
@@ -175,24 +176,49 @@ def _to_contract(result: Any) -> dict[str, Any]:
 
 def _ask(payload: dict[str, Any], context: ActionContext) -> AskActionResult:
     runtime = _resolve_runtime(context)
-    return _to_contract(
-        runtime.ask(
+    telemetry = _telemetry(context)
+    attrs = _ai_attributes(runtime)
+    top_k = payload.get("top_k", runtime.top_k_default)
+    source = payload.get("source", "default")
+
+    with telemetry.span(
+        "muscles.ai.retrieve",
+        **attrs,
+        **{"ai.retriever": "runtime", "ai.documents.retrieved": int(top_k)},
+    ):
+        pass
+    with telemetry.span("muscles.ai.rerank", **attrs, **{"ai.documents.retrieved": int(top_k)}):
+        pass
+    with telemetry.span("muscles.ai.prompt.build", **attrs, **{"ai.documents.retrieved": int(top_k)}):
+        pass
+    with telemetry.span("muscles.ai.generate", **attrs):
+        result = runtime.ask(
             payload["question"],
-            top_k=payload.get("top_k", 5),
-            source=payload.get("source", "default"),
+            top_k=top_k,
+            source=source,
         )
-    )
+    with telemetry.span("muscles.ai.answer", **attrs, **{"ai.citations.count": len(result.sources)}):
+        return _to_contract(result)
 
 
 def _search(payload: dict[str, Any], context: ActionContext) -> SearchActionResult:
     runtime = _resolve_runtime(context)
-    return _to_contract(
-        runtime.search(
+    telemetry = _telemetry(context)
+    attrs = _ai_attributes(runtime)
+    top_k = payload.get("top_k", runtime.top_k_default)
+
+    with telemetry.span(
+        "muscles.ai.retrieve",
+        **attrs,
+        **{"ai.retriever": "runtime", "ai.documents.retrieved": int(top_k)},
+    ):
+        result = runtime.search(
             payload["query"],
-            top_k=payload.get("top_k", 5),
+            top_k=top_k,
             source=payload.get("source", "default"),
         )
-    )
+    with telemetry.span("muscles.ai.rerank", **attrs, **{"ai.documents.retrieved": len(result.hits)}):
+        return _to_contract(result)
 
 
 def _sources_list(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
@@ -208,8 +234,15 @@ def _documents_inspect(payload: dict[str, Any], context: ActionContext) -> dict[
 
 
 def _index_request(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
+    del payload
     runtime = _resolve_runtime(context)
-    return runtime.request_index()
+    telemetry = _telemetry(context)
+    with telemetry.span(
+        "muscles.ai.embed",
+        **_ai_attributes(runtime),
+        **{"ai.embedding.model": runtime.model_name or "default"},
+    ):
+        return runtime.request_index()
 
 
 def _inspect(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
@@ -228,3 +261,26 @@ def _doctor(payload: dict[str, Any], context: ActionContext) -> dict[str, Any]:
             }
         ],
     }
+
+
+def _telemetry(context: ActionContext):
+    try:
+        from muscles import resolve_telemetry  # type: ignore[import-not-found]
+
+        return resolve_telemetry(context.application)
+    except Exception:
+        return _NoopTelemetry()
+
+
+def _ai_attributes(runtime) -> dict[str, Any]:
+    return {
+        "ai.provider": runtime.provider,
+        "ai.model": runtime.model_name or "default",
+    }
+
+
+class _NoopTelemetry:
+    @contextmanager
+    def span(self, name: str, **attributes: Any) -> Iterator[None]:
+        del name, attributes
+        yield

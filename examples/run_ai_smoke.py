@@ -6,14 +6,29 @@ Run:
   PYTHONPATH=src python examples/run_ai_smoke.py
 """
 
+from contextlib import contextmanager
 from types import SimpleNamespace
+from typing import Any, Iterator
 
-from muscles import ActionDispatcher, inspect_application
+from muscles import ActionDispatcher, DependencyContainer, TelemetryProvider, inspect_application
 from muscles_ai import init_package
 
 
+class MemoryTelemetry:
+    def __init__(self) -> None:
+        self.records: list[tuple[str, dict[str, Any]]] = []
+
+    @contextmanager
+    def span(self, name: str, **attributes: Any) -> Iterator[None]:
+        self.records.append((name, dict(attributes)))
+        yield
+
+
 def main() -> None:
-    app = SimpleNamespace()
+    telemetry = MemoryTelemetry()
+    app = SimpleNamespace(container=DependencyContainer())
+    app.container.register(TelemetryProvider, lambda: telemetry)
+
     init_package(
         app,
         {
@@ -43,8 +58,8 @@ def main() -> None:
 
     inspect_payload = dispatcher.execute("ai.inspect", {})
     print("ai.inspect ->", inspect_payload.value["features"])
+    print("telemetry spans:", [name for name, _ in telemetry.records])
 
 
 if __name__ == "__main__":
     main()
-
