@@ -69,6 +69,23 @@ The package registers the following actions:
 - Runtime clients must be registered in DI and used from actions/context, not kept in `ApplicationRegistry`.
 - Transport packages should discover `ai.*` actions through `inspect_application(app)` and execute through `ActionDispatcher`.
 - Document ingestion belongs in `muscles-documents`; AI should consume document contracts instead of duplicating parsers.
+- Telemetry is resolved through the neutral Muscles `TelemetryProvider`; this
+  package does not import `muscles-otel` directly.
+
+## Telemetry
+
+When a project registers a `TelemetryProvider`, `muscles-ai` emits safe spans:
+
+- `muscles.ai.embed`
+- `muscles.ai.retrieve`
+- `muscles.ai.rerank`
+- `muscles.ai.prompt.build`
+- `muscles.ai.generate`
+- `muscles.ai.answer`
+
+Allowed attributes include provider/model names, retriever name, retrieved
+document count and citation count. Raw queries, prompts, answers, excerpts,
+chunks, request bodies and API keys must not be stored in span attributes.
 
 ## Examples
 
@@ -90,4 +107,6 @@ Both examples:
 
 - initialize the package via `init_package(app, config)`;
 - register all ai actions;
-- call actions through `ActionDispatcher`.
+- call actions through `ActionDispatcher`;
+- demonstrate the neutral telemetry provider hook without requiring
+  `muscles-otel`.

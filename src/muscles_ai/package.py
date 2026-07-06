@@ -16,26 +16,39 @@ class AiPackage:
         return AiRuntime(**self._runtime_kwargs(_normalize_config(config)))
 
     def services(self, app, runtime: AiRuntime):
-        container = _ensure_container(app)
-        container.register(AiRuntime, lambda: runtime)
-        return runtime
+        del app
+        return [_package_service(AiRuntime, lambda: runtime)]
 
-    def actions(self, app, runtime: AiRuntime, *, config: AiConfig):
+    def actions(self, app, runtime: AiRuntime, *, config: AiConfig | Mapping[str, Any]):
         del runtime
-        register_ai_actions(app, transports=config.transports)
-        return True
+        package_config = config if isinstance(config, AiConfig) else _normalize_config(config)
+        register_ai_actions(app, transports=package_config.transports)
+        return []
+
+    def inspection_provider(self, app, runtime: AiRuntime, config: AiConfig | Mapping[str, Any] | None = None):
+        del app, config
+        return runtime.capabilities
+
+    def doctor_provider(self, app, runtime: AiRuntime, config: AiConfig | Mapping[str, Any] | None = None):
+        del app, config
+
+        def doctor_ai() -> dict[str, Any]:
+            return {
+                "status": "ok",
+                "checks": [
+                    {
+                        "name": "ai.runtime.exists",
+                        "status": "ok" if runtime is not None else "failed",
+                    }
+                ],
+            }
+
+        return doctor_ai
 
     def init(self, app, config):
         package_config = _normalize_config(config or {})
-        runtime = AiRuntime(
-            key=package_config.key,
-            provider=package_config.provider,
-            model_name=package_config.model_name,
-            options=package_config.options,
-            top_k_default=package_config.top_k_default,
-            top_k_max=package_config.top_k_max,
-        )
-        self.services(app, runtime)
+        runtime = self.build_runtime(app, package_config)
+        _apply_services(app, self.services(app, runtime))
         self.actions(app, runtime, config=package_config)
         return runtime
 
@@ -56,18 +69,18 @@ def init_package(app, config: Mapping[str, Any] | None):
     Muscles package entry point.
     """
     package = AiPackage()
-    runtime = package.init(app, config or {})
     installable = _resolve_install_hook()
     if installable is not None:
         try:
-            # Future extension point once core package lifecycle lands.
             return installable(app=app, config=config, package=package)  # type: ignore[call-arg]
         except Exception:
             pass
-    return runtime
+    return package.init(app, config or {})
 
 
 def _normalize_config(config) -> AiConfig:
+    if isinstance(config, AiConfig):
+        return config
     if not isinstance(config, Mapping):
         if hasattr(config, "_object") and isinstance(getattr(config, "_object"), Mapping):
             config = dict(getattr(config, "_object"))
@@ -93,6 +106,36 @@ def _ensure_container(app):
         container = _dependency_container()
         setattr(app, "container", container)
     return container
+
+
+def _package_service(interface: type, provider: Any):
+    try:
+        from muscles import PackageService  # type: ignore[import-not-found]
+
+        return PackageService(interface=interface, provider=provider)
+    except Exception:
+        return {"interface": interface, "provider": provider}
+
+
+def _apply_services(app, services: Any) -> None:
+    container = _ensure_container(app)
+    for service in services or []:
+        if isinstance(service, Mapping):
+            container.register(
+                service["interface"],
+                service["provider"],
+                *tuple(service.get("args", ())),
+                scope=service.get("scope", getattr(container, "APP", "app")),
+                **dict(service.get("kwargs", {})),
+            )
+            continue
+        container.register(
+            service.interface,
+            service.provider,
+            *tuple(getattr(service, "args", ())),
+            scope=getattr(service, "scope", getattr(container, "APP", "app")),
+            **dict(getattr(service, "kwargs", {})),
+        )
 
 
 def _resolve_install_hook():
