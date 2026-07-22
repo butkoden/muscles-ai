@@ -113,6 +113,68 @@ def test_gateway_supports_configured_fake_provider_without_loading_optional_sdk(
     assert gateway.inspect()["models"][0]["name"] == "text.fake"
 
 
+def test_gateway_routes_two_named_providers_with_defaults_per_capability() -> None:
+    gateway = ModelGateway.from_config(
+        providers={
+            "text-provider": {"type": "fake", "options": {"answer_prefix": "text"}},
+            "image-provider": {"type": "fake", "options": {"answer_prefix": "image"}},
+        },
+        models={
+            "text.model": {
+                "provider": "text-provider",
+                "model": "text-native",
+                "capabilities": ["text.generate"],
+            },
+            "image.model": {
+                "provider": "image-provider",
+                "model": "image-native",
+                "capabilities": ["image.generate"],
+            },
+        },
+        defaults={
+            "text.generate": "text.model",
+            "image.generate": "image.model",
+        },
+    )
+
+    text = gateway.generate_text("hello")
+    image = gateway.generate_image("cat")
+
+    assert text.text.startswith("text")
+    assert image.model == "image-native"
+    assert {item["provider"] for item in gateway.inspect()["models"]} == {
+        "text-provider",
+        "image-provider",
+    }
+
+
+def test_gateway_inspect_redacts_provider_secrets() -> None:
+    gateway = ModelGateway.from_config(
+        providers={
+            "remote": {
+                "type": "openai",
+                "options": {
+                    "api_key": "do-not-print",
+                    "api_key_env": "OPENAI_API_KEY",
+                    "base_url": "https://example.invalid",
+                },
+            }
+        },
+        models={
+            "text.remote": {
+                "provider": "remote",
+                "model": "text-model",
+                "capabilities": ["text.generate"],
+            }
+        },
+    )
+
+    inspected = gateway.inspect()
+
+    assert "do-not-print" not in repr(inspected)
+    assert "api_key" not in repr(inspected)
+
+
 def test_optional_provider_dependency_is_reported_at_use_time() -> None:
     gateway = ModelGateway.from_config(
         providers={"llama": {"type": "llama_cpp", "options": {"model_path": "model.gguf"}}},
