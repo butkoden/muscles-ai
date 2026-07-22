@@ -19,6 +19,30 @@ if TYPE_CHECKING:
         SourceChunk,
     )
     from .memory import FakeLLMProvider, InMemoryRagSource, NoopLLMProvider
+    from .gateway import (
+        GatewayTextGenerationProvider,
+        ModelGateway,
+        ModelGatewayError,
+        ModelNotFoundError,
+        ModelProviderAdapter,
+        ModelProviderCatalog,
+        ModelProviderFactory,
+        OptionalProviderDependencyError,
+        ProviderNotFoundError,
+        PythonModelAdapter,
+    )
+    from .models import (
+        Artifact,
+        EmbeddingRequest,
+        EmbeddingResult,
+        ImageGenerationRequest,
+        ImageGenerationResult,
+        ModelCapability,
+        ModelConfig,
+        ModelProviderConfig,
+        TextGenerationRequest,
+        TextGenerationResult,
+    )
     from .package import AiPackage
     from .ports import (
         IndexRequestPort,
@@ -57,6 +81,26 @@ __all__ = [
     "LLMProvider",
     "AskActionResult",
     "SearchActionResult",
+    "ModelGateway",
+    "ModelGatewayError",
+    "ModelNotFoundError",
+    "ProviderNotFoundError",
+    "OptionalProviderDependencyError",
+    "ModelProviderAdapter",
+    "ModelProviderFactory",
+    "ModelProviderCatalog",
+    "GatewayTextGenerationProvider",
+    "PythonModelAdapter",
+    "ModelCapability",
+    "ModelConfig",
+    "ModelProviderConfig",
+    "Artifact",
+    "TextGenerationRequest",
+    "TextGenerationResult",
+    "ImageGenerationRequest",
+    "ImageGenerationResult",
+    "EmbeddingRequest",
+    "EmbeddingResult",
 ]
 
 
@@ -97,6 +141,36 @@ def __getattr__(name: str):
         from . import memory
 
         return getattr(memory, name)
+    if name in {
+        "ModelGateway",
+        "ModelGatewayError",
+        "ModelNotFoundError",
+        "ProviderNotFoundError",
+        "OptionalProviderDependencyError",
+        "ModelProviderAdapter",
+        "ModelProviderFactory",
+        "ModelProviderCatalog",
+        "GatewayTextGenerationProvider",
+        "PythonModelAdapter",
+    }:
+        from . import gateway
+
+        return getattr(gateway, name)
+    if name in {
+        "ModelCapability",
+        "ModelConfig",
+        "ModelProviderConfig",
+        "Artifact",
+        "TextGenerationRequest",
+        "TextGenerationResult",
+        "ImageGenerationRequest",
+        "ImageGenerationResult",
+        "EmbeddingRequest",
+        "EmbeddingResult",
+    }:
+        from . import models
+
+        return getattr(models, name)
     if name in {
         "VectorSearchPort",
         "KeywordSearchPort",
