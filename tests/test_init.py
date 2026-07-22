@@ -6,7 +6,7 @@ from muscles import inspect_application
 
 import muscles_ai
 from muscles import ActionDispatcher
-from muscles_ai import AiPackage
+from muscles_ai import AiPackage, ModelGateway
 from muscles_ai.runtime import AiRuntime
 
 
@@ -33,3 +33,11 @@ def test_muscles_ai_init_registers_actions_and_runtime():
 def test_muscles_ai_public_exports():
     assert hasattr(muscles_ai, "AiRuntime")
     assert hasattr(muscles_ai, "AiPackage")
+    assert hasattr(muscles_ai, "ModelGateway")
+
+
+def test_package_registers_model_gateway_in_di():
+    app = _create_app()
+    runtime = AiPackage().init(app, {"key": "ai", "provider": "fake"})
+
+    assert app.container.resolve(ModelGateway) is runtime.model_gateway

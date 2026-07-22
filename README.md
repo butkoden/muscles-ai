@@ -37,10 +37,20 @@ The package expects to be loaded as a Muscles module:
 modules:
   ai:
     package: muscles_ai
-    providers:
-      provider: "noop"
+    provider: "noop"
     transports: ["http", "cli", "mcp"]
 ```
+
+Optional in-process providers are installed only when needed:
+
+```bash
+pip install "muscles-ai[openai]"
+pip install "muscles-ai[llama-cpp]"
+```
+
+The application does not need Ollama or another model server. An adapter can
+call an external SDK/API directly or load a local model library in the current
+process.
 
 ## Public API
 
@@ -52,6 +62,8 @@ Importing package symbols uses lazy `__getattr__` to keep package startup lightw
 - `SearchResult`, `ContextResult`, `AskResult`, `SearchHit`, `SourceChunk`.
 - `VectorSearchPort`, `KeywordSearchPort`, `ParentFetchPort`, `IndexRequestPort`, `LLMProvider`.
 - `InMemoryRagSource`, `FakeLLMProvider`, `NoopLLMProvider` for tests and examples.
+- `ModelGateway`, `ModelProviderCatalog`, `ModelCapability` and typed requests/results for text, image and embedding capabilities.
+- `PythonModelAdapter` for project-owned models and `openai`/`llama_cpp` optional providers.
 - `AiConfig`.
 - `init_package(app, config)` entry point for Muscles.
 
@@ -102,6 +114,47 @@ runtime.register_source(
 Real projects can implement the same ports over Qdrant, PostgreSQL, Elasticsearch
 or another store. This package does not own DSNs, collections, mappings,
 migrations or document parsing.
+
+## Model Gateway
+
+`ModelGateway` is the universal in-process model facade. It routes typed
+requests to named models without exposing provider SDKs to business actions:
+
+```python
+from muscles_ai import ImageGenerationRequest, ModelGateway, TextGenerationRequest
+
+gateway = ModelGateway.from_config(
+    providers={
+        "local": {"type": "llama_cpp", "options": {"model_path": "models/model.gguf"}},
+        "images": {"type": "openai", "options": {"api_key_env": "OPENAI_API_KEY"}},
+    },
+    models={
+        "text.local": {
+            "provider": "local",
+            "model": "local-text",
+            "capabilities": ["text.generate"],
+        },
+        "image.remote": {
+            "provider": "images",
+            "model": "dall-e-3",
+            "capabilities": ["image.generate"],
+        },
+    },
+    defaults={"text.generate": "text.local"},
+)
+
+text = gateway.invoke(TextGenerationRequest(prompt="Explain RAG"))
+image = gateway.invoke(
+    ImageGenerationRequest(prompt="A simple framework diagram"),
+    model="image.remote",
+)
+```
+
+The public facade is shared, while request and response types remain specific to
+the capability. New local runtimes can be registered through
+`ModelProviderCatalog` or `PythonModelAdapter`; no model server is required.
+Images and other binary results are returned as `Artifact` values containing
+bytes or a provider reference. The project decides whether to persist them.
 
 ## Notes
 

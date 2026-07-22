@@ -9,7 +9,7 @@ from .contracts import (
     SearchQuery,
     SearchResult,
 )
-from .memory import FakeLLMProvider, NoopLLMProvider
+from .gateway import ModelGateway
 from .pipeline import RagPipeline, SourceRegistry, default_source, source_capabilities
 
 
@@ -30,6 +30,10 @@ class AiRuntime:
         options: dict[str, Any] | None = None,
         top_k_default: int = 5,
         top_k_max: int = 20,
+        providers: Mapping[str, Mapping[str, Any]] | None = None,
+        models: Mapping[str, Mapping[str, Any]] | None = None,
+        defaults: Mapping[str, str] | None = None,
+        model_gateway: ModelGateway | None = None,
     ) -> None:
         self.key = key
         self.provider = provider
@@ -40,7 +44,12 @@ class AiRuntime:
         self.top_k_max = top_k_max
         self.default_policy = RetrievalPolicy(limit_max=top_k_max)
         self.source_registry = SourceRegistry()
-        self.llm_provider = self._build_llm_provider()
+        self.model_gateway = model_gateway or self._build_model_gateway(
+            providers=providers,
+            models=models,
+            defaults=defaults,
+        )
+        self.llm_provider = self.model_gateway.as_llm_provider()
         self.pipeline = RagPipeline(self.source_registry, policy=self.default_policy, llm_provider=self.llm_provider)
         self.register_source("default", default_source("default"))
         self.register_source("documents", default_source("documents"))
@@ -150,6 +159,7 @@ class AiRuntime:
                 "items": self.list_source_details(),
             },
             "default_policy": self.default_policy.__dict__,
+            "models": self.model_gateway.inspect(),
         }
 
     def doctor(self) -> dict[str, Any]:
@@ -161,6 +171,8 @@ class AiRuntime:
                 "provider": self.provider,
             },
         ]
+        model_doctor = self.model_gateway.doctor()
+        checks.extend(model_doctor.get("checks", []))
         for source_name in self.list_sources():
             adapter = self.source_registry.resolve(source_name)
             capabilities = source_capabilities(adapter)
@@ -200,7 +212,17 @@ class AiRuntime:
             metadata=metadata or {},
         )
 
-    def _build_llm_provider(self):
-        if self.provider == "fake":
-            return FakeLLMProvider(answer_prefix="Fake answer")
-        return NoopLLMProvider(runtime_key=self.key, provider=self.provider, model_name=self.model_name)
+    def _build_model_gateway(
+        self,
+        *,
+        providers: Mapping[str, Mapping[str, Any]] | None,
+        models: Mapping[str, Mapping[str, Any]] | None,
+        defaults: Mapping[str, str] | None,
+    ) -> ModelGateway:
+        if providers or models:
+            return ModelGateway.from_config(providers=providers, models=models, defaults=defaults)
+        return ModelGateway.from_legacy(
+            provider=self.provider,
+            model_name=self.model_name,
+            options=self.options,
+        )

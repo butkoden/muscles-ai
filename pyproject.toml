@@ -18,6 +18,12 @@ dependencies = [
 dev = [
   "pytest>=8.0,<9.0",
 ]
+openai = [
+  "openai>=1.0,<2.0",
+]
+llama-cpp = [
+  "llama-cpp-python>=0.2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

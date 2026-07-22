@@ -5,6 +5,7 @@ from typing import Any, Mapping
 
 from .actions import register_ai_actions
 from .config import AiConfig
+from .gateway import ModelGateway
 from .runtime import AiRuntime
 
 
@@ -17,7 +18,10 @@ class AiPackage:
 
     def services(self, app, runtime: AiRuntime):
         del app
-        return [_package_service(AiRuntime, lambda: runtime)]
+        return [
+            _package_service(AiRuntime, lambda: runtime),
+            _package_service(ModelGateway, lambda: runtime.model_gateway),
+        ]
 
     def actions(self, app, runtime: AiRuntime, *, config: AiConfig | Mapping[str, Any]):
         del runtime
@@ -47,6 +51,9 @@ class AiPackage:
             "provider": config.provider,
             "model_name": config.model_name,
             "options": config.options,
+            "providers": config.providers,
+            "models": config.models,
+            "defaults": config.defaults,
             "top_k_default": config.top_k_default,
             "top_k_max": config.top_k_max,
         }
