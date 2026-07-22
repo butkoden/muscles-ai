@@ -39,6 +39,16 @@ class LlamaCppModelAdapter:
         return TextGenerationResult(text=str(text), model=model_id or self.model.model_id, metadata={"provider": "llama_cpp"})
 
     def inspect(self) -> Mapping[str, Any]:
+        if self._model is None:
+            try:
+                import llama_cpp  # type: ignore[import-not-found,unused-import]
+            except ImportError:
+                return {
+                    "type": "llama_cpp",
+                    "status": "error",
+                    "error": "optional_dependency",
+                    "capabilities": sorted(self.capabilities),
+                }
         return {
             "type": "llama_cpp",
             "status": "ready" if self._model is not None else "configured",

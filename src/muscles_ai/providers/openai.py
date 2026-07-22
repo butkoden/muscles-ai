@@ -54,6 +54,16 @@ class OpenAIModelAdapter:
         raise ValueError(f"openai provider does not support capability '{request.capability}'")
 
     def inspect(self) -> Mapping[str, Any]:
+        if self._client is None:
+            try:
+                import openai  # type: ignore[import-not-found,unused-import]
+            except ImportError:
+                return {
+                    "type": "openai",
+                    "status": "error",
+                    "error": "optional_dependency",
+                    "capabilities": sorted(self.capabilities),
+                }
         return {
             "type": "openai",
             "status": "ready" if self._client is not None else "configured",

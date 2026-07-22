@@ -172,6 +172,25 @@ def test_ai_runtime_builds_gateway_from_provider_and_model_config() -> None:
     assert runtime.model_gateway.inspect()["models"][0]["name"] == "text.configured"
 
 
+def test_doctor_resolves_lazy_adapter_without_loading_model_weights() -> None:
+    gateway = ModelGateway.from_config(
+        providers={"fake": {"type": "fake"}},
+        models={
+            "text.fake": {
+                "provider": "fake",
+                "model": "fake-model",
+                "capabilities": ["text.generate"],
+            }
+        },
+    )
+
+    result = gateway.doctor()
+
+    assert result["status"] == "ok"
+    assert result["checks"][0]["status"] == "ready"
+    assert gateway.inspect()["models"][0]["adapter_loaded"] is True
+
+
 def test_openai_adapter_normalizes_text_image_and_embedding_results() -> None:
     class FakeResponses:
         def create(self, **kwargs):

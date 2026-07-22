@@ -367,13 +367,8 @@ class ModelGateway:
         checks = []
         for binding in self._models.values():
             try:
-                adapter = binding.adapter
-                if adapter is not None:
-                    payload = dict(adapter.inspect())
-                    status = str(payload.get("status", "ok"))
-                else:
-                    status = "configured"
-                    payload = {"status": status, "adapter_loaded": False}
+                adapter = self._resolve_adapter(binding)
+                payload = dict(adapter.inspect())
                 checks.append({"name": f"ai.model.{binding.config.name}", **sanitize_mapping(payload)})
             except Exception as exc:
                 checks.append({"name": f"ai.model.{binding.config.name}", "status": "error", "error": type(exc).__name__})

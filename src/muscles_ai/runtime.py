@@ -190,7 +190,7 @@ class AiRuntime:
                     "capabilities": capabilities,
                 }
             )
-        overall = "ok" if all(check["status"] in {"ok", "ready"} for check in checks) else "warning"
+        overall = "ok" if all(check["status"] in {"ok", "ready", "configured"} for check in checks) else "warning"
         return {"status": overall, "checks": checks}
 
     def _query(
