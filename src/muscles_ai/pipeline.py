@@ -314,14 +314,25 @@ def default_source(name: str = "default") -> InMemoryRagSource:
             RetrievedChunk(
                 chunk_id=f"{name}:overview",
                 text=(
-                    "MVP search stub result for tests and smoke examples. "
+                    "MVP benchmark search stub result for tests and smoke examples. "
                     "Real project adapters can register keyword, vector, and parent fetch ports."
                 ),
                 source=name,
                 score=1.0,
                 title="Default AI source",
                 metadata={"tags": ["ai", "rag"]},
-            )
+            ),
+            RetrievedChunk(
+                chunk_id=f"{name}:capabilities",
+                text=(
+                    "Deterministic benchmark capabilities cover keyword search, vector search, "
+                    "citations, and project-owned adapters."
+                ),
+                source=name,
+                score=0.9,
+                title="Default AI capabilities",
+                metadata={"tags": ["benchmark", "capabilities"]},
+            ),
         ],
         fallback_on_empty=True,
     )

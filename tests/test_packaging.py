@@ -11,5 +11,5 @@ def test_core_dependency_matches_current_muscles_version() -> None:
 
     dependencies = project["project"]["dependencies"]
 
-    assert "muscles>=1.0.0" in dependencies
-    assert not any(item.startswith("muscles>=3.") for item in dependencies)
+    assert "muscles>=1.0.0rc1,<2.0.0" in dependencies
+    assert not any("git+https://" in item for item in dependencies)
