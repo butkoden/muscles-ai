@@ -110,6 +110,15 @@ def test_keyword_vector_and_hybrid_search_are_deterministic_without_llm():
     assert "secret_token" not in hybrid_a.hits[0].metadata
 
 
+def test_default_source_returns_deterministic_smoke_results():
+    runtime = AiRuntime(key="ai", provider="noop", model_name="smoke")
+
+    result = runtime.search("benchmark", source="default", top_k=2)
+
+    assert {hit.chunk_id for hit in result.hits} == {"default:overview", "default:capabilities"}
+    assert all(hit.source == "default" for hit in result.hits)
+
+
 def test_retrieve_context_expands_parents_preserves_citations_and_budget():
     runtime = _runtime()
 
