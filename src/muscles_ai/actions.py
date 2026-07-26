@@ -36,6 +36,7 @@ def _register_action(app, **kwargs):
     )
 
 from .contracts import AskResult, ContextResult, SearchResult
+from .architecture import action_metadata
 
 
 ASK_SCHEMA = {
@@ -114,6 +115,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Ask a question to AI runtime.",
         input_schema=ASK_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.ask"),
         handler=_ask,
     )
     _register_action(
@@ -122,6 +124,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Search in AI retrieval layer.",
         input_schema=SEARCH_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.search"),
         handler=_search,
     )
     _register_action(
@@ -130,6 +133,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Retrieve block-level AI context with citations.",
         input_schema=RETRIEVE_CONTEXT_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.retrieve_context"),
         handler=_retrieve_context,
     )
     _register_action(
@@ -138,6 +142,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="List registered AI sources.",
         input_schema=SIMPLE_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.sources.list"),
         handler=_sources_list,
     )
     _register_action(
@@ -146,6 +151,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Inspect a registered AI source.",
         input_schema=SIMPLE_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.source.inspect"),
         handler=_source_inspect,
     )
     _register_action(
@@ -154,6 +160,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Inspect a source for doc/ chunk availability.",
         input_schema=SIMPLE_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.documents.inspect"),
         handler=_documents_inspect,
     )
     _register_action(
@@ -162,6 +169,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Request index sync/refresh action.",
         input_schema=INDEX_SCHEMA,
         transports=transports,
+        metadata=action_metadata("ai.index.request"),
         handler=_index_request,
     )
     _register_action(
@@ -170,6 +178,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Inspect AI package runtime metadata (safe to show).",
         input_schema=SIMPLE_SCHEMA,
         transports=["cli", "http", "mcp"],
+        metadata=action_metadata("ai.inspect"),
         handler=_inspect,
     )
     _register_action(
@@ -178,6 +187,7 @@ def register_ai_actions(app, *, transports: list[str]) -> list[tuple[str, str]]:
         description="Run lightweight runtime health check.",
         input_schema=SIMPLE_SCHEMA,
         transports=["cli"],
+        metadata=action_metadata("ai.doctor"),
         handler=_doctor,
     )
     return [

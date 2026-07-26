@@ -4,6 +4,7 @@ import inspect
 from typing import Any, Mapping
 
 from .actions import register_ai_actions
+from .architecture import check_ai_architecture
 from .config import AiConfig
 from .gateway import ModelGateway
 from .runtime import AiRuntime
@@ -34,9 +35,18 @@ class AiPackage:
         return runtime.capabilities
 
     def doctor_provider(self, app, runtime: AiRuntime, config: AiConfig | Mapping[str, Any] | None = None):
-        del app, config
-        return runtime.doctor
+        del config
 
+        def provider():
+            result = runtime.doctor()
+            architecture = check_ai_architecture(app)
+            result["checks"].extend(architecture["checks"])
+            result["architecture"] = architecture
+            if architecture["status"] == "error":
+                result["status"] = "error"
+            return result
+
+        return provider
     def init(self, app, config):
         package_config = _normalize_config(config or {})
         runtime = self.build_runtime(app, package_config)
