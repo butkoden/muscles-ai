@@ -49,4 +49,12 @@ exact phrase match, tag metadata, deprecated penalties and source diversity.
   indexing synchronously.
 - `ai.inspect` and `ai.doctor` return safe machine-readable diagnostics.
 
+## Architecture checks
+
+The AI package exposes architecture guidance through inspection capabilities:
+role, preferred and forbidden patterns, and deterministic rules. AI actions
+carry explicit `ai`, `architecture` and `mcp` metadata. The package doctor
+checks the metadata contract locally; it does not call an LLM or a model
+provider. Models are consumers of these rules, never the enforcement layer.
+
 `ai.documents.inspect` remains as a compatibility alias for `ai.source.inspect`.

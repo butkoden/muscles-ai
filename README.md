@@ -81,6 +81,24 @@ The package registers the following actions:
 - `ai.inspect`
 - `ai.doctor`
 
+## AI architecture contract
+
+`inspect_application(app)["capabilities"]["ai"]["architecture"]` publishes a
+machine-readable implementation contract for developers and coding agents. It
+contains the package role, preferred/allowed/forbidden patterns and stable
+deterministic rules with `id`, `severity` and `summary` fields.
+
+Every `ai.*` action also declares three metadata namespaces:
+
+- `metadata["ai"]` describes the AI/RAG operation;
+- `metadata["architecture"]` describes side effects, state changes and confirmation;
+- `metadata["mcp"]` describes MCP exposure and read-only safety.
+
+`ai.index.request` is state-changing and requires explicit confirmation. The
+package doctor validates these invariants without loading an AI model or making
+provider network calls. An AI model may consume the contract to guide code
+generation, but it is not used to enforce the rules.
+
 ## RAG Toolkit
 
 `muscles-ai` owns RAG orchestration, not project data storage:
