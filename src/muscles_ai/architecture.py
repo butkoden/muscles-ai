@@ -225,4 +225,3 @@ def _action_value(action: Any, key: str, default: Any = None) -> Any:
     if isinstance(action, Mapping):
         return action.get(key, default)
     return getattr(action, key, default)
-
