@@ -213,7 +213,6 @@ class AiRuntime:
             filters=filters or {},
             metadata=metadata or {},
         )
-
     def _build_model_gateway(
         self,
         *,

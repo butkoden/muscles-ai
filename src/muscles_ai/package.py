@@ -47,7 +47,6 @@ class AiPackage:
             return result
 
         return provider
-
     def init(self, app, config):
         package_config = _normalize_config(config or {})
         runtime = self.build_runtime(app, package_config)
