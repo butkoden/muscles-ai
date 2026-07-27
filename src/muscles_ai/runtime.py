@@ -11,6 +11,7 @@ from .contracts import (
 )
 from .gateway import ModelGateway
 from .pipeline import RagPipeline, SourceRegistry, default_source, source_capabilities
+from .architecture import architecture_contract
 
 
 class AiRuntime:
@@ -160,6 +161,7 @@ class AiRuntime:
             },
             "default_policy": self.default_policy.__dict__,
             "models": self.model_gateway.inspect(),
+            "architecture": architecture_contract(),
         }
 
     def doctor(self) -> dict[str, Any]:
